@@ -1,0 +1,1 @@
+color_compile gcc $1 -Wall -I/home/aran/github/libevent/include/ -L/home/aran/github/libevent/.libs -levent_core -Wl,-rpath,/home/aran/github/libevent/.libs
