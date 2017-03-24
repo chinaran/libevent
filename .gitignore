@@ -147,3 +147,6 @@ cscope*
 /*.tar.gz
 
 /.vagrant
+
+.tags*
+*.sublime*
