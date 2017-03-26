@@ -1,48 +1,63 @@
 #include "include/common.h"
 
-
-int main(int argc, char *argv[])
+void start_conn(int epoll_fd, int conn_num, const char *ip, int port)
 {
-	if (argc <= 2)
-	{
-		printf("usage: %s ip_address port_number\n", basename(argv[0]));
-		return 1;
-	}
-
 	int i;
 	int ret;
-	int num;
-	int count = 0;
-	char buf[BUF_SIZE];
-	const char *ip = argv[1];
-	int port = atoi(argv[2]);
 	struct sockaddr_in address;
 	bzero(&address, sizeof(address));
 	address.sin_family = AF_INET;
 	inet_pton(AF_INET, ip, &address.sin_addr);
 	address.sin_port = htons(port);
 
-	int listenfd = socket(PF_INET, SOCK_STREAM, 0);
-	assert(listenfd >= 0);
+	for (i = 0; i < conn_num; ++i)
+	{
+		usleep(1000 * 10);
+		int sockfd = socket(PF_INET, SOCK_STREAM, 0);
+		if (-1 == sockfd)
+		{
+			printf("socket() err: %s\n", strerror(errno));
+			continue;
+		}
+		printf("[client]: create 1 sock = %d\n", sockfd);
+		ret = connect(sockfd, (struct sockaddr *)&address,sizeof(address));
+		if (0 == ret)
+		{
+			printf("[client]: build connection, sd = %d\n", sockfd);
+			Add_epoll_fd(epoll_fd, sockfd, EPOLLOUT);
+			Set_nonblocking(sockfd);
+		}
+		else
+		{
+			printf("[client]: build connection failed: %s, sd = %d\n", strerror(errno), sockfd);
+			close(sockfd);
+			continue;
+		}
+	}
+}
 
-	ret = Set_reuse_addr(listenfd);
-	assert(-1 != ret);
+int main(int argc, char *argv[])
+{
+	int i;
+	int ret;
+	int num;
+	int count = 0;
+	char buf[BUF_SIZE];
 
-	ret = bind(listenfd, (struct sockaddr *)&address, sizeof(address));
-	assert(-1 != ret);
+	if (argc <= 3)
+	{
+		printf("usage: %s ip_address port_number cli_num\n", basename(argv[0]));
+		return 1;
+	}
 
-	ret = listen(listenfd, 5);
-
-	struct epoll_event events[MAX_EVENT_NUMBER + 1];
 	int epoll_fd = epoll_create(5);
 	assert(-1 != epoll_fd);
-	Add_epoll_fd(epoll_fd, listenfd, EPOLLIN);
-	Set_nonblocking(listenfd);
 
-	// handle 
+	start_conn(epoll_fd, atoi(argv[3]), argv[1], atoi(argv[2]));
+	struct epoll_event events[MAX_EVENT_NUMBER];
 	while (1)
 	{
-		num = epoll_wait(epoll_fd, events, MAX_EVENT_NUMBER, -1);
+		num = epoll_wait(epoll_fd, events, MAX_EVENT_NUMBER, 2000);
 		if (num < 0)
 		{
 			printf("epoll failure\n");
@@ -51,17 +66,7 @@ int main(int argc, char *argv[])
 		for (i = 0; i < num; ++i)
 		{
 			int sockfd = events[i].data.fd;
-			if (listenfd == sockfd)
-			{
-				struct sockaddr_in client_address;
-				socklen_t client_addr_len = sizeof(client_address);
-				int connfd = accept(listenfd, (struct sockaddr *)&client_address, &client_addr_len);
-				assert(-1 != connfd);
-				printf("[listenfd] = %d, [connfd] = %d\n", listenfd, connfd);
-				Add_epoll_fd(epoll_fd, connfd, EPOLLIN);
-				Set_nonblocking(connfd);
-			}
-			else if (events[i].events & EPOLLIN)
+			if (events[i].events & EPOLLIN)
 			{
 				printf("sockfd = %d, event in\n", sockfd);
 				while (1)
@@ -80,7 +85,7 @@ int main(int argc, char *argv[])
 					}
 					else if (0 == ret)
 					{
-						printf("sockfd = %d closed_2\n", sockfd);
+						printf("sockfd = %d closed_2: %s\n", sockfd, strerror(errno));
 						Epoll_close_conn(epoll_fd, sockfd);
 					}
 					else
@@ -94,7 +99,7 @@ int main(int argc, char *argv[])
 			else if (events[i].events & EPOLLOUT)
 			{
 				printf("sockfd = %d, event out\n", sockfd);
-				snprintf(buf, BUF_SIZE, "ser_fd=%d: %010d", sockfd ,++count);
+				snprintf(buf, BUF_SIZE, "cli_fd=%d: %010d", sockfd, ++count);
 				char *p = buf;
 				int len = strlen(buf);
 				while (1)
@@ -123,6 +128,6 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	Epoll_close_conn(epoll_fd, listenfd);
 	return 0;
 }
+

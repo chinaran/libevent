@@ -28,3 +28,9 @@ void Epoll_close_conn(int epoll_fd, int fd)
 	epoll_ctl(epoll_fd, EPOLL_CTL_DEL, fd, 0);
 	close(fd);
 }
+
+int Set_reuse_addr(int sd)
+{
+	int option;
+	return setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, &option, sizeof(option));
+}
